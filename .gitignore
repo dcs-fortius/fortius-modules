@@ -1,0 +1,13 @@
+node_modules
+.env
+
+#Hardhat files
+cache
+artifacts
+exports
+coverage
+coverage.json
+tasks/test.js
+src/test.js
+
+GasTest.*
