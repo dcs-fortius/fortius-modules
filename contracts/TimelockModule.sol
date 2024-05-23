@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.18;
 
-import {Enum} from "./Enum.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Enum} from "./Enum.sol";
 
 interface GnosisSafe {
     function execTransactionFromModule(
@@ -17,7 +17,15 @@ contract TimelockModule {
     string public constant NAME = "Timelock Module";
     string public constant VERSION = "0.1.0";
 
-    struct Scheduled {
+    event TransferScheduled(
+        bytes32 indexed id,
+        address indexed safe,
+        uint256 timestamp
+    );
+    event TransferExecuted(bytes32 indexed id, address indexed safe);
+    event TransferCancelled(bytes32 indexed id, address indexed safe);
+
+    struct TransferItem {
         address token;
         address[] recipients;
         uint256[] values;
@@ -28,7 +36,7 @@ contract TimelockModule {
         bool canceled;
     }
 
-    mapping(address => mapping(bytes32 => Scheduled)) private _scheduled;
+    mapping(address => mapping(bytes32 => TransferItem)) private _scheduled;
 
     function hashOperation(
         address safe,
@@ -64,6 +72,8 @@ contract TimelockModule {
         bool cancellable,
         bytes32 salt
     ) public {
+        require(timestamp > block.timestamp, "Invalid timestamp");
+        require(recipients.length == values.length, "Length mismatch");
         bytes32 id = hashOperation(
             msg.sender,
             token,
@@ -74,10 +84,12 @@ contract TimelockModule {
             cancellable,
             salt
         );
+        require(_scheduled[msg.sender][id].timestamp == 0, "Item existed");
+        emit TransferScheduled(id, msg.sender, timestamp);
         if (escrow) {
             _escrow(GnosisSafe(msg.sender), token, values);
         }
-        _scheduled[msg.sender][id] = Scheduled(
+        _scheduled[msg.sender][id] = TransferItem(
             token,
             recipients,
             values,
@@ -90,7 +102,12 @@ contract TimelockModule {
     }
 
     function execute(address safe, bytes32 id) public {
-        Scheduled storage item = _scheduled[safe][id];
+        TransferItem storage item = _scheduled[safe][id];
+        require(item.timestamp > 0, "Item not found");
+        require(!item.executed, "Item executed");
+        require(!item.canceled, "Item canceled");
+        require(item.timestamp <= block.timestamp, "Too early");
+        emit TransferExecuted(id, msg.sender);
         if (!item.escrow) {
             _escrow(GnosisSafe(safe), item.token, item.values);
         }
@@ -106,7 +123,12 @@ contract TimelockModule {
     }
 
     function cancel(bytes32 id) public {
-        Scheduled storage item = _scheduled[msg.sender][id];
+        TransferItem storage item = _scheduled[msg.sender][id];
+        require(item.timestamp > 0, "Item not found");
+        require(!item.executed, "Item executed");
+        require(!item.canceled, "Item canceled");
+        require(item.cancellable, "Item not cancellable");
+        emit TransferCancelled(id, msg.sender);
         item.canceled = true;
     }
 
