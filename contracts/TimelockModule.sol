@@ -15,7 +15,7 @@ interface GnosisSafe {
 
 contract TimelockModule {
     string public constant NAME = "Timelock Module";
-    string public constant VERSION = "0.1.0";
+    string public constant VERSION = "0.1.1";
 
     event TransferScheduled(
         bytes32 indexed id,
@@ -37,6 +37,8 @@ contract TimelockModule {
     }
 
     mapping(address => mapping(bytes32 => TransferItem)) private _scheduled;
+
+    receive() external payable {}
 
     function hashOperation(
         address safe,
