@@ -38,6 +38,20 @@ const config: HardhatUserConfig = {
       live: true,
       saveDeployments: true,
     },
+    optimism: {
+      chainId: 10,
+      url: "https://optimism.blockpi.network/v1/rpc/public",
+      accounts,
+      live: true,
+      saveDeployments: true,
+    },
+    base: {
+      chainId: 8453,
+      url: "https://mainnet.base.org",
+      accounts,
+      live: true,
+      saveDeployments: true,
+    },
     sepolia: {
       chainId: 11155111,
       url: "https://ethereum-sepolia.blockpi.network/v1/rpc/public",

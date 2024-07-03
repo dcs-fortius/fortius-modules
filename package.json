@@ -5,12 +5,14 @@
   "scripts": {
     "lint": "prettier --check ./src/{**/*,*}.js ./test/{**/*,*}.js ./contracts/{**/*,**/**/*}.sol ",
     "lint:fix": "prettier  --write ./src/{**/*,*}.js ./test/{**/*,*}.js ./contracts/{**/*,**/**/*}.sol",
-    "arbitrum:deploy": "hardhat --network arbitrum deploy",
-    "arbitrum:export": "hardhat --network arbitrum export --export exports/arbitrum.json",
+    "arbitrum:deploy": "hardhat --network arbitrum deterministicDeploy",
     "arbitrum:verify": "hardhat --network arbitrum etherscan-verify --solc-input",
-    "polygon:deploy": "hardhat --network polygon deploy",
-    "polygon:export": "hardhat --network polygon export --export exports/polygon.json",
+    "polygon:deploy": "hardhat --network polygon deterministicDeploy",
     "polygon:verify": "hardhat --network polygon etherscan-verify --solc-input",
+    "optimism:deploy": "hardhat --network optimism deterministicDeploy",
+    "optimism:verify": "hardhat --network optimism etherscan-verify --solc-input",
+    "base:deploy": "hardhat --network base deterministicDeploy",
+    "base:verify": "hardhat --network base etherscan-verify --solc-input",
     "compile": "hardhat compile",
     "coverage": "hardhat coverage",
     "test": "hardhat test"

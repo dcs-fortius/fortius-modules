@@ -1,50 +1,25 @@
 const { task } = require("hardhat/config")
-const { BigNumber } = require('ethers')
+const { deterministicAddress, deterministicDeploy } = require("./deployer2")
 
-function expandTo18Decimals(n) {
-	return BigNumber.from(n).mul(BigNumber.from(10).pow(18))
-}
+const SAFE_FACTORY = "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"
+const SAFE_SINGLETON = "0x3E5c63644E683549055b9Be8653de26E0B4CD36E"
 
-task('accounts', 'Prints the list of accounts', async (_args, hre) => {
-	const accounts = await hre.ethers.getSigners();
-	for (const account of accounts) {
-		console.log(account.address);
-	}
-});
-
-task("send", "Send token")
-	.addParam("account", "Account address")
-	.setAction(async ({ account }, hre) => {
-		const tokenAddress = (await hre.deployments.get("AethirToken")).address
-		console.log('Token Address:', tokenAddress)
-		const token = await hre.ethers.getContractAt('AethirToken', tokenAddress)
-		console.log(await token.transfer(account, expandTo18Decimals('50000000')));
+task("printAddress", "Print deterministic address")
+	.setAction(async ({ }, hre) => {
+		await deterministicAddress(hre,
+			"FortiusSafeFactory",
+			[SAFE_FACTORY, SAFE_SINGLETON],
+			['address', 'address']
+		)
+		await deterministicAddress(hre, "TimelockModule")
 	})
 
-task("transferOwnership", "Send token")
-	.addParam("account", "Account address")
-	.setAction(async ({ account }, hre) => {
-		const tokenAddress = (await hre.deployments.get("AethirToken")).address
-		console.log('Token Address:', tokenAddress)
-		const token = await hre.ethers.getContractAt('AethirToken', tokenAddress)
-		console.log(await token.transferOwnership(account));
-
-		const vesterAddress = (await hre.deployments.get("VestingWallet")).address
-		console.log('Vester Address:', vesterAddress)
-		const vester = await hre.ethers.getContractAt('VestingWallet', vesterAddress)
-		console.log(await vester.transferOwnership(account));
-	})
-
-task("check", "Send token")
-	.setAction(async ({  }, hre) => {
-		const tokenAddress = (await hre.deployments.get("AethirToken")).address
-		console.log('Token Address:', tokenAddress)
-		const token = await hre.ethers.getContractAt('AethirToken', tokenAddress)
-		console.log(await token.allowedAmount('0xa2ae19D0423c8D43f3382C6807017Cc799CC6314'));
-		console.log(await token.transferedAmount('0xa2ae19D0423c8D43f3382C6807017Cc799CC6314'));
-	
-		const vesterAddress = (await hre.deployments.get("VestingWallet")).address
-		console.log('Vester Address:', vesterAddress)
-		const vester = await hre.ethers.getContractAt('VestingWallet', vesterAddress)
-		console.log(await vester.getDistribution("0xa2ae19D0423c8D43f3382C6807017Cc799CC6314"))
+task("deterministicDeploy", "Deploy contracts with deterministic address")
+	.setAction(async ({ }, hre) => {
+		await deterministicDeploy(hre,
+			"FortiusSafeFactory",
+			[SAFE_FACTORY, SAFE_SINGLETON],
+			['address', 'address']
+		)
+		await deterministicDeploy(hre, "TimelockModule")
 	})
