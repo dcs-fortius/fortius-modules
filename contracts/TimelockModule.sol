@@ -110,6 +110,7 @@ contract TimelockModule {
         require(!item.canceled, "Item canceled");
         require(item.timestamp <= block.timestamp, "Too early");
         emit TransferExecuted(id, msg.sender);
+        item.executed = true;
         if (!item.escrow) {
             _escrow(GnosisSafe(safe), item.token, item.values);
         }
@@ -121,7 +122,6 @@ contract TimelockModule {
             for (uint256 i = 0; i < item.recipients.length; i++)
                 require(token.transfer(item.recipients[i], item.values[i]));
         }
-        item.executed = true;
     }
 
     function cancel(bytes32 id) public {
@@ -132,6 +132,17 @@ contract TimelockModule {
         require(item.cancellable, "Item not cancellable");
         emit TransferCancelled(id, msg.sender);
         item.canceled = true;
+        if (item.escrow) {
+            uint256 amount = 0;
+            for (uint256 i = 0; i < item.values.length; i++) {
+                amount += item.values[i];
+            }
+            if (item.token == address(0)) {
+                payable(msg.sender).transfer(amount);
+            } else {
+                require(IERC20(item.token).transfer(msg.sender, amount));
+            }
+        }
     }
 
     function _escrow(
