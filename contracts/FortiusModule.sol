@@ -34,9 +34,8 @@ contract FortiusModule {
         Cancelled
     }
 
-    
-
     struct Transaction {
+        address proposer;
         address token;
         address[] recipients;
         uint256[] values;
@@ -47,8 +46,17 @@ contract FortiusModule {
         uint256 approvals;
     }
 
-    mapping(address => mapping(address => Role)) public roles;
-    mapping(address => mapping(bytes32 => Transaction)) public transactions;
+    struct Allowance {
+        uint96 amount;
+        uint96 spent;
+        uint32 lastResetMin;
+        uint16 resetTimeMin;
+    }
+
+    mapping(address => mapping(address => Role)) public roles; // safe => address => Role
+    mapping(address => mapping(bytes32 => Transaction)) public transactions; // safe => txHash => Transaction
+    mapping(address => mapping(address => mapping(address => Allowance)))
+        public allowances; // safe => allowanceOwner => token => Allowance
 
     event TransactionProposed(
         address indexed safe,
@@ -67,6 +75,26 @@ contract FortiusModule {
         address executor
     );
     event TransactionCancelled(address indexed safe, bytes32 indexed txHash);
+
+    event SetAllowance(
+        address indexed safe,
+        address indexed allowanceOwner,
+        address indexed token,
+        uint96 allowanceAmount,
+        uint16 resetTimeMin
+    );
+
+    event ResetAllowance(
+        address indexed safe,
+        address allowanceOwner,
+        address token
+    );
+
+    event DeleteAllowance(
+        address indexed safe,
+        address allowanceOwner,
+        address token
+    );
 
     receive() external payable {}
 
@@ -123,7 +151,25 @@ contract FortiusModule {
             "Transaction already exists"
         );
 
+        Allowance memory proposerAllowance = allowances[safe][msg.sender][
+            token
+        ];
+
+        uint96 totalValue = 0;
+        for (uint256 i = 0; i < values.length; i++) {
+            totalValue += uint96(values[i]);
+        }
+        uint96 newSpent = proposerAllowance.spent + totalValue;
+
+        require(
+            newSpent <= proposerAllowance.amount - proposerAllowance.spent,
+            "Proposer allowance exceeded or newSpent <= proposerAllowance.amount"
+        );
+        proposerAllowance.spent = newSpent;
+        updateAllowance(safe, msg.sender, token, proposerAllowance);
+
         transactions[safe][id] = Transaction({
+            proposer: msg.sender,
             token: token,
             recipients: recipients,
             values: values,
@@ -228,6 +274,17 @@ contract FortiusModule {
         require(txn.cancellable, "Item not cancellable");
 
         txn.status = TxStatus.Cancelled;
+
+        Allowance memory proposerAllowance = allowances[msg.sender][
+            txn.proposer
+        ][txn.token];
+
+        uint96 totalValue = 0;
+        for (uint256 i = 0; i < txn.values.length; i++) {
+            totalValue += uint96(txn.values[i]);
+        }
+        proposerAllowance.spent = proposerAllowance.spent - totalValue;
+        updateAllowance(msg.sender, txn.proposer, txn.token, proposerAllowance);
         emit TransactionCancelled(msg.sender, id);
     }
 
@@ -279,5 +336,87 @@ contract FortiusModule {
         return
             transactions[safe][txHash].approvals >=
             GnosisSafe(safe).getThreshold();
+    }
+
+    //for limit
+
+    function getAllowance(
+        address safe,
+        address allowanceOwner,
+        address token
+    ) private view returns (Allowance memory allowance) {
+        allowance = allowances[safe][allowanceOwner][token];
+        uint32 currentMin = uint32(block.timestamp / 60);
+        if (
+            allowance.resetTimeMin > 0 &&
+            allowance.lastResetMin <= currentMin - allowance.resetTimeMin
+        ) {
+            allowance.spent = 0;
+            // Resets happen in regular intervals and `lastResetMin` should be aligned to that
+            allowance.lastResetMin =
+                currentMin -
+                ((currentMin - allowance.lastResetMin) %
+                    allowance.resetTimeMin);
+        }
+        return allowance;
+    }
+
+    function setAllowance(
+        address allowanceOwner,
+        address token,
+        uint96 allowanceAmount,
+        uint16 resetTimeMin
+    ) public {
+        require(token != address(0), "Token address cannot be zero");
+
+        Allowance memory allowance = allowances[msg.sender][allowanceOwner][
+            token
+        ];
+        uint32 currentMin = uint32(block.timestamp / 60);
+
+        if (allowance.lastResetMin == 0) {
+            allowance.lastResetMin = currentMin;
+        }
+
+        allowance.resetTimeMin = resetTimeMin;
+        allowance.amount = allowanceAmount;
+        updateAllowance(msg.sender, allowanceOwner, token, allowance);
+        emit SetAllowance(
+            msg.sender,
+            allowanceOwner,
+            token,
+            allowanceAmount,
+            resetTimeMin
+        );
+    }
+
+    function resetAllowance(address allowanceOwner, address token) public {
+        Allowance memory allowance = allowances[msg.sender][allowanceOwner][
+            token
+        ];
+        allowance.spent = 0;
+        updateAllowance(msg.sender, allowanceOwner, token, allowance);
+        emit ResetAllowance(msg.sender, allowanceOwner, token);
+    }
+
+    function deleteAllowance(address allowanceOwner, address token) public {
+        Allowance memory allowance = allowances[msg.sender][allowanceOwner][
+            token
+        ];
+        allowance.amount = 0;
+        allowance.spent = 0;
+        allowance.resetTimeMin = 0;
+        allowance.lastResetMin = 0;
+        updateAllowance(msg.sender, allowanceOwner, token, allowance);
+        emit DeleteAllowance(msg.sender, allowanceOwner, token);
+    }
+
+    function updateAllowance(
+        address safe,
+        address allowanceOwner,
+        address token,
+        Allowance memory allowance
+    ) private {
+        allowances[safe][allowanceOwner][token] = allowance;
     }
 }
